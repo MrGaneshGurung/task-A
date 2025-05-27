@@ -1,1 +1,1 @@
-# task-A
+# This project implements a simplified, executable MapReduce-like framework in Python to identify the passenger(s) with the highest number of flights from an airline dataset. It emulates the core phases of Hadoop MapReduce (Map, Combine, Reduce) using multi-threading, data chunking, and modular design, suitable for local development and prototyping.
