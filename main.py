@@ -5,13 +5,16 @@ from typing import Dict, List, Any
 
 # ======================== DataLoader Class =======================
 class DataLoader:
-    """Class to load data efficiently using buffered reading and error handling."""
+    """
+    Responsible for reading and loading CSV flight data into a pandas DataFrame.
+    Uses buffered reading via chunks to support large datasets efficiently.
+    """
 
     @staticmethod
     def load_data(file_path: str) -> pd.DataFrame:
         """
-        Reads data from a CSV file in chunks to handle large files.
-        Returns a combined DataFrame or an empty one in case of error.
+        Reads data from a CSV file using chunki9ng for memory efficiency.
+        Returns a concatenated DataFrame or an empty one if an error occurs.
         """
         try:
             with open(file_path, 'r') as file:
@@ -26,15 +29,19 @@ class DataLoader:
             return pd.DataFrame()
 # ======================== Mapper Class ========================
 class Mapper:
-    """Mapper processes each data chunk and emits local count of flights per passenger."""
+    """
+    Processes a chunk of flight data and emits key-value pairs.
+    In this case, each key is a 'Passenger_ID', and the value is a flight count (1).
+    Each Mapper handles a seperate chunk of the full dataset in a seperate thread.
+    """
 
     def __init__(self):
-        self.local_count = defaultdict(int)  # Dictionary to store intermediate counts
+        self.local_count = defaultdict(int)  # Stores passenger-wise flight counts
 
     def map(self, data_chunk: pd.DataFrame) -> None:
         """
-        Iterates over each row to count flights per Passenger_ID.
-        Ignores null values.
+        Processes each row in the data chunk.
+        Emits (Passenger_ID, 1) for each valid record and stores count in memory.
         """
         for _, row in data_chunk.iterrows():
             passenger_id = row.get('Passenger_ID')
@@ -42,17 +49,17 @@ class Mapper:
                 self.local_count[passenger_id] += 1
 
     def get_local_count(self) -> Dict[str, int]:
-        """Returns the local (thread-specific) passenger flight counts."""
+        """Returns the local dictionary of flight counts per passenger for this mapper."""
         return self.local_count
 # ======================== Combiner Class ========================
 class Combiner:
-    """Combiner aggregates results from each Mapper before passing to Reducer."""
+    """Aggregates intermediate key-value pairs (i.e., passenger flight counts) from a Mapper before passing them to the Reducer. This reduces the data size passed between Map and Reduce phases."""
 
     @staticmethod
     def combine(data: Dict[str, int]) -> Dict[str, int]:
         """
-        Merges partial results into a new combined dictionary.
-        Helps reduce data size before final reduction.
+        Accepts a Mapper's output and merges it into a single combined dictionary.
+        Used for local aggregation before the final reduction.
         """
         combined_data = defaultdict(int)
         for passenger_id, count in data.items():
@@ -61,7 +68,7 @@ class Combiner:
 
 # ======================== Reducer Class ========================
 class Reducer:
-    """Reducer identifies the passenger(s) with the highest number of flights."""
+    """Takes the combined results from all threads and finds the passenger(s) with the maximum number of flights. This is the final stage in the MapReduce pipeline."""
 
     @staticmethod
     def reduce(combined_data: Dict[str, int]) -> (List[str], int):
@@ -78,8 +85,9 @@ class Reducer:
 # ======================== MapReduce Class ========================
 class MapReduce:
     """
-    Implements a multithreaded MapReduce framework.
-    Executes Mapper, Combiner, and Reducer using parallelism.
+    Orchestrates the entire MapReduce-like pipeline.
+    Splits the dataset, runs Mappers in parallel using threading.
+    aggregates intermediate results via the combiner, and applies the Reducer.
     """
 
     def __init__(self, data: pd.DataFrame, num_threads: int = 4):
@@ -104,7 +112,8 @@ class MapReduce:
             thread = threading.Thread(target=mapper.map, args=(data_chunk,))
             threads.append((thread, mapper))
             thread.start()
-
+            
+# wait for all threads to finish and gather their results
         for thread, mapper in threads:
             thread.join()
             combined_data = Combiner.combine(mapper.get_local_count())
